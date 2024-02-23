@@ -95,6 +95,7 @@ class data():
   vh5 = h5py.File('phelel_params.hdf5')  #read file
   vh5.visititems(self.print_attrs) #list all attributes
   print(vh5['/Dij'][()].shape)
+  print('size of supercell',vh5['/phonon_supercell_matrix'][:])
 
  def generate_fullbz(self):
   self.vkpt_fbz = []
@@ -112,6 +113,27 @@ class data():
   for ni,i in enumerate(ordered_k_to_unordered): self.unordered_k_to_ordered[i]=ni
   print(self.nkpx)
 
+ def k_to_q_conversion_fullbz(self):
+#  ibz_to_fbz=[[] for i in self.vkpt_ibz]
+#  for ni,i in enumerate(self.vkpt_fbz):
+#   ibz_to_fbz[i[3]].append(ni)
+  only_vec=[np.array([int(i*self.nkpx[ni]) for ni,i in enumerate(k[:3])]) for k in self.vkpt_fbz]
+  self.kkp_to_q=[[ [] for j in self.vkpt_ibz] for i in (self.vkpt_fbz)] #np.zeros((len(self.vkpt_fbz),len(self.vkpt_fbz)),dtype=int)+100000
+  self.freq_q=np.zeros((len(self.vkpt_fbz),(self.no_of_modes)))
+#  for nk,k in enumerate(self.vkpt_fbz): self.vkpt_fbz[nk]=[np.array([int(i*self.nkpx[ni]) for ni,i in enumerate(k[:3])])]+k[3:]
+  #for k in self.vkpt_ibz: k[:3]=np.array([int(i*self.nkpx[ni]) for ni,i in enumerate(k[:3])])
+  for nkp,kp in enumerate(only_vec):
+   for nk,k in enumerate(only_vec):
+    q=kp-k
+    for i in range(3):
+      while q[i]<0: q[i]+=self.nkpx[i]
+      while q[i]>=self.nkpx[i]: q[i]-=self.nkpx[i]
+    nq=int(q[2]+self.nkpx[2]*q[1]+self.nkpx[2]*self.nkpx[1]*q[0])
+    self.kkp_to_q[nkp][self.vkpt_fbz[nk][3]].append(nq)
+    self.freq_q[nq,:]=self.freq[nkp,self.vkpt_fbz[nk][3],:]
+  print(self.freq_q)
+  print(self.kkp_to_q)
+  
  def k_to_q_conversion(self):
 #  ibz_to_fbz=[[] for i in self.vkpt_ibz]
 #  for ni,i in enumerate(self.vkpt_fbz):
@@ -132,7 +154,7 @@ class data():
     self.freq_q[nq,:]=self.freq[nk,nkp,:]
   print(self.freq_q)
   print(self.kkp_to_q)
-  
+
 
 
  def read_vaspelph(self):
@@ -161,7 +183,7 @@ class data():
   elph_reim=[]
   fermi_beg=fermi_nbnd_el[0]
   fermi_stop=fermi_nbnd_el[-1]+1
-  elph_reim = vh5['/matrix_elements/elph'][0,:,:,:,fermi_beg:fermi_stop,fermi_beg:fermi_stop] #[fullbzkp][ibzkp][mode][iband][jband]
+  elph_reim = vh5['/matrix_elements/elph'][0,:,:,:,fermi_beg:fermi_stop,fermi_beg:fermi_stop] #[k' fullbzkp][k ibzkp][mode][jband][iband]
   #for i in range(int(len(self.vkpt_fbz)/250)):
   # print(i)
   # elph_reim.append(vh5['/matrix_elements/elph'][0,i*250:(i+1)*(250),:,:,fermi_beg:fermi_stop,fermi_beg:fermi_stop])

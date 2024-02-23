@@ -5,7 +5,7 @@ from operator import itemgetter
 import read_data
 import calc_elph 
 import copy
-
+import eliashberg
  
 ELECTRONMASS_SI  = 9.10938215e-31   # Kg
 AMU_SI           = 1.660538782e-27   #Kg
@@ -34,14 +34,23 @@ data.read_phelel_params()
 print('\nvaspout')
 data.read_vaspout()
 print('\nvaspelph')
+
 data.read_vaspelph()
 data.read_outcar()
 data.k_to_q_conversion()
 print('conv ended')
 #data.read_vasprun()
 #data.write_frmsf(data.nkpx_v,data.e,data.ENE_v,data.vkpt_fbz,[],'ene')
+
 elph=calc_elph.lambd(data)
 elph.init_tetra(data)
 #elph.calc_dos(data)
 elph.calc_lambda(data)
 elph.calc_a2f_smearing(data)
+
+
+eliashberg=eliashberg.eliashberg_solver()
+eliashberg.calc_bandwidth(data)
+eliashberg.read_a2f()
+eliashberg.calc_mu()
+eliashberg.solve_eq()

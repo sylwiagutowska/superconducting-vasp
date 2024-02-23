@@ -156,14 +156,17 @@ def w0gauss(x,degauss=0.6):
   sqrtpm1= 1. / 1.77245385090551602729
   sqrt2=2.**0.5
   # cold smearing  (Marzari-Vanderbilt-DeVita-Payne)
-  try: arg=np.minimum(mask,(x2 - 1.0 /  sqrt2 ) **2.)
-  except: arg=min(200/13.606,x2**2)
-  return  sqrtpm1 *np.exp ( - arg) * (2.0 - sqrt2 * x2)/degauss  #exp(-arg)*sqrtpm1/degauss 
+#  try: arg=np.minimum(mask,(x2 - 1.0 /  sqrt2 ) **2.)
+#  except: arg=min(200/13.606,x2**2)
+#  return  sqrtpm1 *np.exp ( - arg) * (2.0 - sqrt2 * x2)/degauss  #exp(-arg)*sqrtpm1/degauss 
   #gauss
-  #try: arg=np.minimum(mask,x2 **2.)
-  #except: arg=min(200/13.606,x2**2)
-  #return  np.exp(-arg)*sqrtpm1/degauss 
+  try: arg=np.minimum(mask,x2 **2.)
+  except: arg=min(200/13.606,x2**2)
+  return  np.exp(-arg)*sqrtpm1/degauss 
+
+
   
+
 class lambd():
  def __init__(self,data):
    ELPH_sum=[]  
@@ -234,6 +237,51 @@ class lambd():
 
 
  def calc_a2f_smearing(self,data): 
+  nw0=200
+  nw=nw0+16
+  degauss=np.max(data.freq)/nw0*4 #for dirac delta with phonon frequencies
+  self.ELPH_sum=np.zeros(shape=(len(data.vkpt_fbz),data.no_of_modes),dtype=float)
+  self.A2F=np.zeros(shape=(nw),dtype=float) 
+  self.F=np.zeros(shape=(nw),dtype=float)
+  for numk, k in enumerate(data.vkpt_ibz): 
+     for numkp, kp in enumerate(data.vkpt_fbz):
+      for nu in range(data.no_of_modes):
+       if(data.freq[numkp,numk,nu]<0.1/(3289.8449/13.606)): data.elph[numkp,numk,nu,:,:]=0
+
+  dos=0
+  OM=np.linspace(0,np.max(data.freq)*(1+16./nw0),nw)
+  for jband in range(data.no_of_bands):
+   print(jband)
+   for numk, k in enumerate(data.vkpt_ibz): 
+    if abs(data.ENE[jband][numk])>2: continue
+    weight0=w0gauss(-data.ENE[jband][numk]) *data.k_weights[numk]
+    dos+=weight0
+    for iband in range(data.no_of_bands):
+     for numkp, kp in enumerate(data.vkpt_fbz): 
+      if abs(data.ENE[iband][kp[3]])>2: continue
+      weight=w0gauss(-data.ENE[iband][kp[3]])*weight0 #*weight0 #*self.WEIGHTS_OF_K[self.kQ[numkp][1]]
+      for nu in range(data.no_of_modes):
+       self.ELPH_sum[data.kkp_to_q[numkp][numk]][nu] += np.absolute((data.elph[numkp][numk][nu][iband][jband]))**2 * weight
+  print(dos)
+  self.ELPH_sum/=dos 
+
+  for nw,w in enumerate(OM):
+   for nq in range(len(data.vkpt_fbz)):
+    for nu in range(data.no_of_modes):
+      weight=w0gauss(w-data.freq_q[nq,nu],degauss)
+      self.A2F[nw]+=weight*self.ELPH_sum[nq][nu]
+      self.F[nw]+=weight
+  self.A2F/=len(data.vkpt_fbz)
+  self.F/=len(data.vkpt_fbz)
+  h=open('a2f.dat','w')
+  h.write('#w(THz), a2F, F\n')
+  for nw,w in enumerate(OM):
+    h.write(str(w*eV_to_THz)+' '+str(self.A2F[nw])+' '+str(self.F[nw]/eV_to_THz)+'\n')
+  h.close()
+ 
+ 
+ 
+ def calc_a2f_smearing2(self,data): 
   nw=200
   degauss=np.max(data.freq)/nw*3 #for dirac delta with phonon frequencies
   self.ELPH_sum=np.zeros(shape=(len(data.vkpt_fbz),data.no_of_modes),dtype=float)
@@ -276,8 +324,8 @@ class lambd():
   #data.write_frmsf(data.nkpx,data.e,data.ENE,data.vkpt_fbz,self.ELPH_sum,'lambda')
 
   #print('lambda',np.sum([calc_dos(self.tetra_noneq,self.ELPH_sum,data.ENE,iband) for iband in range(data.no_of_bands)])/dos )
-
- def calc_a2f_smearing(self,data): 
+  
+ def calc_a2f_smearing1(self,data): 
   nw=200
   degauss=np.max(data.freq)/nw*3 #for dirac delta with phonon frequencies
   self.ELPH_sum=np.zeros(shape=(len(data.vkpt_fbz),data.no_of_modes),dtype=float)
@@ -297,9 +345,48 @@ class lambd():
     for iband in range(data.no_of_bands):
      for numkp, kp in enumerate(data.vkpt_fbz): 
       if abs(data.ENE[iband][kp[3]])>2: continue
-      weight=w0gauss(-data.ENE[iband][kp[3]])*weight0 #*weight0 #*self.WEIGHTS_OF_K[self.kQ[numkp][1]]
+      weight1=w0gauss(-data.ENE[iband][kp[3]])*weight0 #*weight0 #*self.WEIGHTS_OF_K[self.kQ[numkp][1]]
+      for nw,w in enumerate(OM):
+       for nu in range(data.no_of_modes):
+        weight2=w0gauss(w-data.freq[numkp][numk][nu])
+        weight=weight1*weight2
+        self.A2F[nw]+= np.absolute((data.elph[numkp][numk][nu][iband][jband]))**2 * weight
+        self.F[nw]+=weight2
+  self.A2F/=(len(data.vkpt_fbz)*len(data.vkpt_ibz))
+  self.F/=(len(data.vkpt_fbz)*len(data.vkpt_ibz))
+
+ 
+  h=open('a2f.dat','w')
+  h.write('#w(THz), a2F, F\n')
+  for nw,w in enumerate(OM):
+    h.write(str(w*eV_to_THz)+' '+str(self.A2F[nw])+' '+str(self.F[nw]/eV_to_THz)+'\n')
+  h.close()
+
+
+ def calc_a2f_smearing3(self,data): 
+  nw=200
+  degauss=np.max(data.freq)/nw*3 #for dirac delta with phonon frequencies
+  self.ELPH_sum=np.zeros(shape=(len(data.vkpt_fbz),data.no_of_modes),dtype=float)
+  self.A2F=np.zeros(shape=(nw),dtype=float) 
+  self.F=np.zeros(shape=(nw),dtype=float)
+  for numk, k in enumerate(data.vkpt_ibz): 
+     for numkp, kp in enumerate(data.vkpt_fbz):
       for nu in range(data.no_of_modes):
-       self.ELPH_sum[data.kkp_to_q[numkp][numk]][nu] += np.absolute((data.elph[numkp][numk][nu][iband][jband]))**2 * weight
+       if(data.freq[numkp,numk,nu]<0.1/(3289.8449/13.606)): data.elph[numkp,numk,nu,:,:]=0
+
+  OM=np.linspace(0,np.max(data.freq),nw)
+  for jband in range(data.no_of_bands):
+   print(jband)
+   for numk, k in enumerate(data.vkpt_ibz): 
+    if abs(data.ENE[jband][numk])>2: continue
+    weight0=w0gauss(-data.ENE[jband][numk]) #*data.k_weights[k[3]]
+    for iband in range(data.no_of_bands):
+     for numkp, kp in enumerate(data.vkpt_fbz): 
+      if abs(data.ENE[iband][kp[3]])>2: continue
+      weight=w0gauss(-data.ENE[iband][kp[3]])*weight0 #*weight0 #*self.WEIGHTS_OF_K[self.kQ[numkp][1]]
+      for nq in data.kkp_to_q[numkp][numk]:
+       for nu in range(data.no_of_modes):
+        self.ELPH_sum[nq][nu] += np.absolute((data.elph[numkp][numk][nu][iband][jband]))**2 * weight
   self.ELPH_sum/=len(data.vkpt_fbz)
 
   for nw,w in enumerate(OM):
@@ -315,13 +402,8 @@ class lambd():
   for nw,w in enumerate(OM):
     h.write(str(w*eV_to_THz)+' '+str(self.A2F[nw]/eV_to_THz)+' '+str(self.F[nw]/eV_to_THz)+'\n')
   h.close()
-  #dos=np.sum([calc_dos(self.tetra_noneq,np.ones(data.ENE.shape),data.ENE,iband) for iband in range(data.no_of_bands)])
-  #print('dos',dos)
-  #data.write_frmsf(data.nkpx,data.e,data.ENE,data.vkpt_fbz,self.ELPH_sum,'lambda')
-
-  #print('lambda',np.sum([calc_dos(self.tetra_noneq,self.ELPH_sum,data.ENE,iband) for iband in range(data.no_of_bands)])/dos )
-
-   
+  
+     
  def calc_dos(self,data):
   tetra=construct_tetra(*data.nkpx)
   tetra_noneq=[[data.vkpt_fbz[m][3] for m in t ] for t in tetra]
