@@ -2,10 +2,12 @@
 import xml.etree.ElementTree as ET
 import numpy as np
 from operator import itemgetter
+from matplotlib import pyplot as plt
 import read_data
 import calc_elph 
 import copy
 import eliashberg
+import eliashberg_aniso
  
 ELECTRONMASS_SI  = 9.10938215e-31   # Kg
 AMU_SI           = 1.660538782e-27   #Kg
@@ -29,28 +31,45 @@ def round_complex(y):
  return y
 
 data=read_data.data()
-print('phelel_params')
-data.read_phelel_params()
+#print('phelel_params')
+#data.read_phelel_params()
 print('\nvaspout')
 data.read_vaspout()
 print('\nvaspelph')
 
 data.read_vaspelph()
 data.read_outcar()
-data.k_to_q_conversion()
-print('conv ended')
+data.calc_kkp_to_q()
+
+
+
+#data.k_to_q_conversion() #dunno if needed check later
+print(data)
 #data.read_vasprun()
-#data.write_frmsf(data.nkpx_v,data.e,data.ENE_v,data.vkpt_fbz,[],'ene')
+data.write_frmsf(data.nkpx,data.e,data.ENE,[],'ene')
+
+#exit()
+#plt.hist(np.abs(data.elph.flatten())**2)
+#plt.yscale('log')
+#plt.show()
 
 elph=calc_elph.lambd(data)
 elph.init_tetra(data)
 #elph.calc_dos(data)
-elph.calc_lambda(data)
-elph.calc_a2f_smearing(data)
-
+#elph.calc_lambda(data)
+#elph.calc_a2f(data)
+#elph.calc_a2f_smearing(data)
+'''
 
 eliashberg=eliashberg.eliashberg_solver()
-eliashberg.calc_bandwidth(data)
+#eliashberg.calc_bandwidth(data)
+#eliashberg.A2F=data.A2F
+#eliashberg.OM_a2f=data.OM_a2f
 eliashberg.read_a2f()
 eliashberg.calc_mu()
 eliashberg.solve_eq()
+
+'''
+eliashberg_aniso=eliashberg_aniso.eliashberg_aniso_solver(data)
+
+eliashberg_aniso.solve_eq(data)
